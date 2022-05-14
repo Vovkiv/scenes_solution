@@ -74,7 +74,7 @@ scenes.remove = function(...)
   local scenesToDelete = {...}
   for i = 1, #scenesToDelete do
     if scenes.cash[scenesToDelete[i]] then
-      error("You can't remove scene, that in use... Unset it and only then delete")
+      error("You attempted to delete scene \"" .. scenesToDelete[i] .. "\".\nYou can delete")
     else
       for i2 = 1, #scenes.list do
         if scenes.list[i2].name == scenesToDelete[i] then
@@ -139,6 +139,7 @@ scenes.add = function(...)
       for i2 = 1, #scenes.list do
         if loaded[i].name == scenes.list[i2].name then
           error("You tried to add scene " .. loaded[i].name .. " to list, but there already " .. scenes.list[i2].name .. "...")
+          break
         end
       end
   end
@@ -155,6 +156,7 @@ scenes.unset = function(...)
       if scenes.currectScenes[i2].name == scenesToUnset[i] then
         scenes.currectScenes[i2] = nil
         scenes.updateCash()
+        break
       end
     end
   end
@@ -172,6 +174,7 @@ scenes.set = function(...)
     for i2 = 1, #scenes.list do
       if scenesToSet[i] == scenes.list[i2].name then
         scenes.currectScenes[i] = scenes.list[i2]
+        break
       end
     end
   end
@@ -208,5 +211,4 @@ return scenes
 --[[
 Version 1000, ?? mounth 2022
 * Initial release
---]]
 --]]
