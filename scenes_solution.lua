@@ -36,168 +36,182 @@ For more information, please refer to <https://unlicense.org>
 ]]
 }
 -- scenes, that will be rendered
-scenes.currectScenes = {}
+scenes.active = {}
+-- when library need to send something for active scenes
+-- it will use this, because it will be sorted for that.
+scenes.activeSorted = {}
 -- path to scenes, that you want to load;
 -- leave name without "/" at end, e.g: "path/to/scenes", not "path/to/scenes/"
 scenes.path = ""
--- list of scenes by name
+-- list of scenes by name.
+-- e.g: scene1, scene2
 scenes.list = {}
--- scenes stored in "currectScenes" with numeric indexes, but here they stored with names, that you give them
--- (or names, that file with scene have).
--- So you can call for specific scene with "scenes.cash.scene".
--- if you somewhere changed "currectScenes" not via provided by library functions, make sure after changes
--- do "scenes.updateCash"; it will build new one
-scenes.cash = {}
 
--- simply sort scenes by their "layer" properties, that you give in their files
--- or via "scenes.updateLayer"
--- if you somewhere changed layers of scenes not via library functions, then call "scenes.sort".
--- It will sort from the smallest numbers to biggest.
-scenes.sort = function()
-  table.sort(scenes.currectScenes, function(a, b)
-    return a.layer < b.layer
-  end)
+-- Will generate new "scenes.activeSorted" array, which used to call scenes in order, which determined by
+-- "layer" value.
+-- You don't need to use this function, if you use only built-in functions to change/update list of active scenes
+-- otherwise, call this function when "scenes.active" or "activeSorted" changed.
+scenes.generateActive = function()
+  scenes.activeSorted = {}
+  for key, scene in pairs(scenes.active) do
+    table.insert(scenes.activeSorted, scene)
+  end
+  scenes.sort()
 end
 
--- will build new cash; refer to scenes.cash for more info.
-scenes.updateCash = function()
-  scenes.cash = {}
-  for i = 1, #scenes.currectScenes do
-    scenes.cash[scenes.currectScenes[i].name] = scenes.currectScenes[i]
-  end
+-- Will sort "scenes.activeSorted" by "layer" properties, that you give in their respective scene files
+-- or via "scenes.updateLayer" or with any other way...
+-- If you use only built-in function to add active scene, change scenes oredering, etc, then you can ignore this function
+-- But if you manually somewhere changed "layer" of scenes manually then call "scenes.sort" after you changed it.
+scenes.sort = function()
+  table.sort(scenes.activeSorted, function(a, b)
+    return a.layer < b.layer
+  end)
 end
 
 -- Will remove scenes from list (and therefore memory).
 -- You can't remove scene, that in use, so use "scenes.set" or "scenes.unset"
 -- to remove scene from active scenes and only then delete unused scene.
 scenes.remove = function(...)
-  local scenesToDelete = {...}
-  for i = 1, #scenesToDelete do
-    if scenes.cash[scenesToDelete[i]] then
-      error("You attempted to delete scene \"" .. scenesToDelete[i] .. "\".\nYou can delete")
-    else
-      for i2 = 1, #scenes.list do
-        if scenes.list[i2].name == scenesToDelete[i] then
-          table.remove(scenes.list, i2)
-          break
-        end
-      end
-    end
+  local deleteScenes = {...}
+  for i = 1, #deleteScenes do
+    local name = deleteScenes[i]
+    assert(not scenes.active[name], "You tried to delete scene \"" .. name .. "\", but it's scene in active list, which means you can't delete it.\nUnset it and only then remove")
+    assert(scenes.list[name], "You tried to delete scene \"" .. name .. "\", but there is no such scene")
+    scenes.list[name].delete()
+    scenes.active[name] = nil
   end
 end
 
--- Return flat table of all currectly used scenes names
--- {scene1, scene2, scene3}.
--- If there is no at all active scenes, then return false.
--- Might be useful, to check if there at least 1 scene is active, before sendinf functions to it, to avoid errors raising.
-scenes.getActiveScenes = function()
+-- Return table of all currectly active scenes
+-- e.g: {scene1, scene2, scene3}.
+-- If there is no active scenes, will return false.
+-- Might be used as:
+--  local activeList = scenes.getActiveList 
+--  for i = 1, #activeList do
+--     -- why not delete all "load" functions from them?
+--     -- (don't delete load function, please)
+--     scenes.list.active[activeList[i]].load = nil
+--  end
+scenes.getActiveList = function()
   local activeScenes = {}
-  for i = 1, #scenes.currectScenes do
-    activeScenes[i] = scenes.currectScenes[i].name
+  
+  for i = 1, #scenes.activeSorted do
+    activeScenes[i] = scenes.activeSorted[i].name
   end
-  if #activeScenes > 1 then
+  if #activeScenes > 0 then
     return activeScenes
   end
   return false
-  end
+end
 
 -- Check if specified scene is active.
-scenes.isSceneActive = function(sceneName)
-  if scenes.cash[sceneName] then
+scenes.isActive = function(scene)
+  if scenes.active[scene] then
     return true
   end
+  
   return false
 end
 
---
+-- Check if specific scene is in list of loaded scenes.
+scenes.inList = function(scene)
+  if scenes.list[scene] then
+    return true
+  end
+  
+  return false
+end
+
+-- Update layer of specific scene.
+-- Ordering goes from lesser number to bigger: 0 > 1 > 1 > 10 > 20.
 scenes.updateLayer = function(scene, layer)
-  assert(scenes.cash[scene], "You tried to update layer of scene \"" .. layer .. "\" but there is not such scene")
-  scenes.cash[scene].layer = layer
+  assert(scenes.active[scene], "You tried to update layer of scene \"" .. scene.. "\"" .. " but there is not such scene")
+  assert(layer, "To update layer of scene \"" .. scene.. "\"" .. " you need to provide number!")
+  scenes.active[scene].layer = layer
   scenes.sort()
 end
 
--- add you scene to list.
+-- Add new scene to list.
+-- Uses "require" to load scenes.
 scenes.add = function(...)
   local scenesList = {...}
   local loaded = {}
   local sceneLoadingError
   for i = 1, #scenesList do
-    local pathRequire = scenes.path .. "/" .. scenesList[i]
-    sceneLoadingError, loaded[i] = pcall(require, pathRequire)
+  local pathRequire = scenes.path .. "/" .. scenesList[i]
+    sceneLoadingError, loaded[scenesList[i]] = pcall(require, pathRequire)
     assert(sceneLoadingError, "You tried to open scene file \"" .. pathRequire .. ".lua\", but there is no such file")
-    
-    assert(type(loaded[i]) == "table", "Scene file \"" .. scenesList[i] .. "\" doesn't return table, required by library, at all!\nCheck bottom of this library file for more instructions!")
-    assert(type(loaded[i].load) == "function", "Library require, that table of scene \"" .. scenesList[i] .. "\" should have \"load\" function!")
-    assert(type(loaded[i].final) == "function", "Library require, that table of scene \"" .. scenesList[i] .. "\" should have \"final\" function!")
-    
-    loaded[i].name = (loaded[i].name or scenesList[i])
-    loaded[i].layer = (loaded[i].layer or 0)
   end
   
-  -- Check if there already loaded scene file
-    for i = 1, #loaded do
-      for i2 = 1, #scenes.list do
-        if loaded[i].name == scenes.list[i2].name then
-          error("You tried to add scene " .. loaded[i].name .. " to list, but there already " .. scenes.list[i2].name .. "...")
-          break
-        end
-      end
-  end
+  for key, scene in pairs(loaded) do
+    scene.name = (scene.name or key)
+    scene.layer = (scene.layer or 0)
+    local name = scene.name
+    assert(type(scene) == "table", "Scene file \"" .. name .. "\" doesn't return table, required by library, at all!\nCheck bottom of this library file for more instructions!")
+    assert(type(scene.load) == "function", "Library require, that table of scene \"" .. name .. "\" should have \"load\" function!")
+    assert(type(scene.final) == "function", "Library require, that table of scene \"" .. name .. "\" should have \"final\" function!")
+    assert(type(scene.delete) == "function", "Library require, that table of scene \"" .. name .. "\" should have \"delete\" function!")
+    assert(type(scene.add) == "function", "Library require, that table of scene \"" .. name .. "\" should have \"add\" function!")
     
-    scenes.list = loaded
+    assert(not scenes.list[name], "You tried to add scene " .. name .. " to list, but there already scene with same name!")
+    
+    scenes.list[key] = scene
+    scenes.list[key].add()
+  end
+
 end
 
 -- Will unset ONLY specified scene.
 -- Not specified scenes WILL BE NOT touched.
 scenes.unset = function(...)
-  local scenesToUnset = {...}
-  for i = 1, #scenesToUnset do
-    for i2 = 1, #scenes.currectScenes do
-      if scenes.currectScenes[i2].name == scenesToUnset[i] then
-        scenes.currectScenes[i2] = nil
-        scenes.updateCash()
-        break
-      end
-    end
+  local unsetScenes = {...}
+  
+  for i = 1, #unsetScenes do
+    local name = unsetScenes[i]
+    assert(scenes.active[name], "You tried to unset \"" .. name .. "\" but there no such scene in list of active scenes")
+    scenes.active[name].final()
+    scenes.active[name] = nil
   end
+  
+  scenes.generateActive()
 end
 
 -- Will clear list of all 
 scenes.set = function(...)
-  for i = 1, #scenes.currectScenes do
-    scenes.currectScenes[i].final()
+  local setScenes = {...}
+
+  for i = 1, #scenes.activeSorted do
+    scenes.activeSorted[i].final()
+  end
+
+  scenes.active = {}
+  
+  for i = 1, #setScenes do
+    local name = setScenes[i]
+    assert(scenes.list[name], "You tried to set scene \"" .. name .. "\" but there no such scene")
+    scenes.active[name] = scenes.list[name]
   end
   
-  scenes.currectScenes = {}
-  local scenesToSet = {...}
-  for i = 1, #scenesToSet do
-    for i2 = 1, #scenes.list do
-      if scenesToSet[i] == scenes.list[i2].name then
-        scenes.currectScenes[i] = scenes.list[i2]
-        break
-      end
-    end
+  scenes.generateActive()
+  
+  for i = 1, #scenes.activeSorted do
+    scenes.activeSorted[i].load()
   end
-  
-  scenes.sort()
-  scenes.updateCash()
-  
-  for i = 1, #scenes.currectScenes do
-    scenes.currectScenes[i].load()
-  end
-  
+
 end
 
 scenes.func = function(func, ...)
-    -- used to push string name function to ALL currect scenes
-    for i = 1, #scenes.currectScenes do
-      scenes.currectScenes[i][func](...)
-    end
+  -- used to push string name function to ALL currect scenes, based on their
+  -- "layer value, which determines which scene will get function earlier, then others
+  for i = 1, #scenes.activeSorted do
+    scenes.activeSorted[i][func](...)
+  end
 end
 
 scenes.func2 = function(scene, func, ...)
   -- push func to specific scene
-  scene.cash[scene][func](...)
+  scene.active[scene][func](...)
 end
 
 return scenes
