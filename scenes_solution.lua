@@ -6,7 +6,12 @@ Scene "syntax":
 
 local scene = {}
 -- Optional, will be gathered from file name, if you doesn't name it.
-scene.name = "name1" -- also don't try change it after you loaded it, it will give you bunch of errors
+-- !!!!!!!! also don't try change it or delete after you loaded scene file;
+-- it will give you bunch of errors AND EVERYTHING WILL COLLAPS
+-- THIS LIBRARY WAS NOT DESIGNED FOR THAT
+-- !!!!!!!!!!!!!!
+scene.name = "name1"
+
 -- Optional, can be changed later with "scenes.updateLayer".
 -- 0 by default.
 -- Determines which scene should be rendered firstly, if you planning to use stacking functionality
@@ -15,19 +20,16 @@ scene.layer = 0
 -- Callback function, will be called when scenes.add will finish loading scene file.
 scene.onAdd = function() end
 
--- Callback function, will be called when scenes.set will mark scene as "active" scene.
+-- Callback function, will be called when scene will be marked as "active" scene via "scenes.change" or "scenes.set".
 scene.onSet = function() end
 
--- Callback function, will be called when you remove scene from active via scenes.set or scenes.unset.
--- (if scene was not added via "scenes.set" then this callback will be never triggered)
+-- Callback function, will be called when you remove scene from active via "scenes.change" or "scenes.unset".
+-- (if scene was not added via "scenes.set" or "scenes.change" then this callback will be never triggered)
 scene.onUnset = function() end
 
 -- Callback function, will be called when you remove scene via "scenes.remove".
 -- Will be called before nil'ing scene table.
 scene.onRemove = function() end
-
--- callback, that allow send from anywhere data to scene.
-scene.onMessage = function(...) end
 
 return scene
 --]]
@@ -77,6 +79,12 @@ scenes.activeSorted = {}
 scenes.path = ""
 -- list of scenes that is "active"
 scenes.list = {}
+-- Check functions before calling them via ".func" or "funcToo".
+-- (function ".func" before calling function will be checking if scene table even have that function.
+-- While ".funcTo" will check if both function and scene exist.
+-- This might be bad for perfomance)
+-- Set false if ".func" or ".funcTo" causing perfomance degradation.
+scenes.checkFunctions = true
 
 scenes.add = function(...)
 --[[
@@ -86,6 +94,12 @@ scenes.add("scene1", "scene2", "scene3")
 Add/load new scenes to memory.
 Name of scene will be determined either by:
 File name or in table, that scene optionally return scene.name
+
+Reminder:
+Because scenes loading via "key = value" table, you can't decide which one will be added first.
+It's up to Lua how to load them.
+(Otherwise, you, probably, can hack into code to change it, but, sadle
+library (at least at moment) doesn't provide any way to normally change priority for ".add" function.
 
 You can add as much scenes at once, as you want:
 scenes.add("scene", "scene1", "scene2").
@@ -182,7 +196,7 @@ scenes.remove("scene1", "scene2", "scene3")
 
 Will nil scene, and therefore, it will become subject for garbage collection.
 .onDelete callback will be called to specific scene before nil'ing, so you can use this to clear your scene data.
-You can't remove scene, that in use, so use "scenes.set" or "scenes.unset"
+You can't remove scene, that in use, so use "scenes.change" or "scenes.unset"
 to remove scene from active scenes and only then remove scene.
 --]]
   local deleteScenes = {...}
@@ -217,10 +231,10 @@ to remove scene from active scenes and only then remove scene.
   end
 end
 
-scenes.set = function(...)
+scenes.change = function(...)
   --[[
 Require scenes that you want to set as arguments:
-scenes.set("scene1", "scene2", "scene3")
+scenes.change("scene1", "scene2", "scene3")
 
 This function will set scenes as "active", so that mean they will get functions, callbacks, etc.
 Also, they can be stacked, so you can simultaneously draw several scenes at once!
@@ -232,9 +246,9 @@ scenes = require("libs/scenes_solution")
 -- Load scene from file to library.
 scenes.add("scene1", "scene2", "scene3")
 -- Set/activate scenes.
-scenes.set("scene1", "scene2, "scene3")
+scenes.change("scene1", "scene2, "scene3")
 -- or activate only 1 scene.
-scenes.set("scene1")
+scenes.change("scene1")
 --]]
   local setScenes = {...}
   
@@ -243,7 +257,7 @@ scenes.set("scene1")
   for i = 1, #setScenes do
     if i == #setScenes then break end
     if setScenes[i] == setScenes[i + 1] then
-      error(".set: you tried to set 2 scenes with same name: \"" .. setScenes[i] .. "\"!")
+      error(".change: you tried to set 2 scenes with same name: \"" .. setScenes[i] .. "\"!")
     end
   end
   
@@ -258,7 +272,7 @@ scenes.set("scene1")
   for i = 1, #setScenes do
     local name = setScenes[i]
     if not scenes.list[name] then
-      error(".set: You tried to set scene \"" .. name .. "\" but there no such scene")
+      error(".change: You tried to set scene \"" .. name .. "\" but there no such scene")
     end
     scenes.active[name] = scenes.list[name]
   end
@@ -268,6 +282,98 @@ scenes.set("scene1")
   for i = 1, #scenes.activeSorted do
     scenes.activeSorted[i].onSet()
   end
+end
+
+scenes.unset = function(...)
+--[[
+Require scenes names:
+scenes.unset("scene1", "scene2", "scene3")
+
+Will unset ONLY specified scene.
+Not specified scenes WILL BE NOT touched.
+(Usefull, if you have, for example, 5 active scenes and you need disable one, without touching other scenes (callbacks, etc))
+
+Example:
+-- Activate scenes that you need.
+scenes.change("scene1", "scene2", "scene3")
+-- Now you don't need scene1, so you
+scenes.unset("scene1")
+-- scene2 and scene3 remained untouched, while scene1 was removed from active list and get ".onUnset() callack.
+--]]
+  
+  local unsetScenes = {...}
+  -- Check for dublicates
+  table.sort(unsetScenes)
+  for i = 1, #unsetScenes do
+    if i == #unsetScenes then break end
+    if unsetScenes[i] == unsetScenes[i + 1] then
+      error(".unset: you tried to unset 2 scenes with same name: \"" .. unsetScenes[i] .. "\"!")
+    end
+  end
+  
+  -- Unpack list of specified scenes and unset them
+  for i = 1, #unsetScenes do
+    local name = unsetScenes[i]
+    if not scenes.active[name] then
+      error(".unset: You tried to unset \"" .. name .. "\" but there no such scene in list of active scenes")
+    end
+    scenes.active[name].onUnset()
+    scenes.active[name] = nil
+  end
+  
+  -- Since list of active scenes changed, we need generate new one.
+  scenes.generateActive()
+end
+
+scenes.set = function(...)
+--[[
+Require scenes names:
+scenes.set("scene1", "scene2", "scene3")
+
+Will set ONLY specified scene.
+Not specified scenes WILL BE NOT touched.
+(Usefull, if you have, for example, 5 active scenes and you need to add another one, without touching other scenes (callbacks, etc))
+
+Example:
+-- Activate scenes that you need.
+scenes.change("scene1", "scene2")
+-- Now you need to add scene3 without touching other, so you do:
+scenes.unset("scene3")
+-- scene1 and scene2 remained untouched, while scene3 was added from all scenes list and get ".onSet() callack.
+--]]
+
+  local setScenes = {...}
+  
+  -- Check incoming arguments for dublicates.
+  table.sort(setScenes)
+  for i = 1, #setScenes do
+    if i == #setScenes then break end
+    if setScenes[i] == setScenes[i + 1] then
+      error(".set: you tried to set 2 scenes with same name: \"" .. setScenes[i] .. "\"!")
+    end
+  end
+
+  -- Unpack incoming arguments.
+  for i = 1, #setScenes do
+    -- localise name.
+    local name = setScenes[i]
+    
+    -- Check if you trying to add scene that was already added.
+    if scenes.active[name] then
+      error(".set: You tried to set scene \"" .. name .. "\" but it already added")
+    end
+    
+    -- Check if scene even exist.
+    if not scenes.list[name] then
+      error(".set: You tried to set scene \"" .. name .. "\" but there no such scene")
+    end
+    -- Add requested scene to list of active scenes
+    scenes.active[name] = scenes.list[name]
+    -- Call ".onSet" callback for this scenes.
+    scenes.active[name].onSet()
+  end
+  
+  scenes.generateActive()
 end
 
 scenes.func = function(func, ...)
@@ -292,9 +398,22 @@ scene.test = function(testVariable)
     print(testVariable)
 end
 --]]
-  
+  -- Localise "check" for functions value.
+  local check = scenes.checkFunctions
+  -- Start sending functions to scenes.
   for i = 1, #scenes.activeSorted do
-    scenes.activeSorted[i][func](...)
+    -- If check procedure disabled, then there no reasons to waste cpu for checks.
+    -- Call function immediately.
+    if not check then
+      return scenes.activeSorted[i][func](...)
+    end
+    
+    -- Check if required function exist.
+    if type(scenes.activeSorted[i][func]) ~= "function" then
+      error(".func: You tried to push function \"".. func .. "\"".. " but there is no such function")
+    end
+    
+    return scenes.activeSorted[i][func](...)
   end
 end
 
@@ -304,8 +423,6 @@ Require scene name as 1st argument, function that you want to call as 2nd argume
 scenes.funcTo("sceneName", "functionName", agruments)
 
 Push function with arguments to specific scene and sent arguments for it.
-By default, it will NOT check if function exist in that scene table (for perfomance reasons).
-(If you need to check incoming function for errors, uncomment commented-out code below).
 
 Example:
 -- main.lua
@@ -317,62 +434,27 @@ scene.testFunction = function(testArgument, ...)
 end
 --]]
   
+  -- If check is disabled then just return function.
+  if not scenes.checkFunctions then
+    return scenes.list[scene][func](...)
+  end
+  
+  -- Otherwise start checking procedure.
   -- Check if scene exist.
   if not scenes.list[scene] then
     error(".funcTo: You tried to push function \"".. func .. "\" in scene \"" .. scene .. "\" but there is no such scene")
   end
 
---[[
+  -- Check if function in scene exist.
   if type(scenes.list[scene][func]) ~= "function" then
-    error(".func2: You tried to push function \"".. func .. "\" in scene \"" .. scene .. "\" but there is no such function")
+    error(".funcTo: You tried to push function \"".. func .. "\" in scene \"" .. scene .. "\" but there is no such function")
   end
---]]
+  
+  -- Otherwise call function.
   return scenes.list[scene][func](...)
 end
 
-scenes.unset = function(...)
-  --[[
-Require scenes names:
-scenes.unset(("scene1", "scene2", "scene3")
-
-Will unset ONLY specified scene.
-Not specified scenes WILL BE NOT touched.
-(Usefull, if you have, for example, 5 active scenes and you need siable one, without touching other scenes (callbacks, etc))
-
-Example:
--- Activate scenes that you need.
-scenes.set("scene1", "scene2", "scene3")
--- Now you don't need scene1, so you
-scenes.unset("scene1")
--- scene2 and scene3 remained untouched, while scene1 was removed from active list and get ".onUnset() callack.
---]]
-  
-  local unsetScenes = {...}
-  
-  -- Check for dublicates
-  table.sort(unsetScenes)
-  for i = 1, #unsetScenes do
-    if i == #unsetScenes then break end
-    if unsetScenes[i] == unsetScenes[i + 1] then
-      error(".unset: you tried to unset 2 scenes with same name: \"" .. unsetScenes[i] .. "\"!")
-    end
-  end
-  
-  -- Unpack list of specified scenes and unset them
-  for i = 1, #unsetScenes do
-    local name = unsetScenes[i]
-    if not scenes.active[name] then
-      error(".unset: You tried to unset \"" .. name .. "\" but there no such scene in list of active scenes")
-    end
-    scenes.active[name].onUnset()
-    scenes.active[name] = nil
-  end
-  
-  -- Since list of active scenes changed, we need generate new one.
-  scenes.generateActive()
-end
-
-scenes.get = function(scene)
+scenes.getScene = function(scene)
 --[[
 Require name scene as argument:
 local scene = scenes.get("scene1")
@@ -381,7 +463,7 @@ Will return table of named scene, so you can localise it or do other stuff.
 Will raise error if there is no scene in loaded list.
 
 Example:
-local scene1 = scenes.get("scene1")
+local scene1 = scenes.getScene("scene1")
 print(scene1.name, scene1.layer)
 --]]
   
@@ -600,7 +682,15 @@ end
 
 return scenes
 
--- demo:
+-- Tips:
+--[[
+1. if you set library as local, then scenes will be unavaiable to contact with each other, which might be useful if you need isolate them.
+Because to functionate, scenes doesn't require library.
+
+2.
+--]]
+
+-- Demo:
 --[[
 -- main.lua
 
