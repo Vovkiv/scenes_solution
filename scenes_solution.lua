@@ -163,20 +163,15 @@ scenes.add("scene1")
       error("Library require, that table of scene \"" .. name .. "\" should have \"onAdd\" function!")
     end
     
-    -- Check if table have "onMessage" function.
-    if type(scene.onMessage) ~= "function" then
-      error("Library require, that table of scene \"" .. name .. "\" should have \"onMessage\" function!")
-    end
-    
     -- Check, if there already loaded scene with same name.
     if scenes.list[name] then
       error("You tried to add scene " .. name .. " to list, but there already scene with same name!")
     end
     
     -- If everything is okay, then add scene to list of files
-    scenes.list[key] = scene
+    scenes.list[scene.name] = scene
     -- Call callback, so library can do something.
-    scenes.list[key].onAdd()
+    scenes.list[scene.name].onAdd()
   end
 end
 
@@ -332,34 +327,7 @@ end
     error(".func2: You tried to push function \"".. func .. "\" in scene \"" .. scene .. "\" but there is no such function")
   end
 --]]
-  scenes.list[scene][func](...)
-end
-
-scenes.send = function(scene, ...)
---[[
-Require scene name as argument and optional arguments:
-scenes.send("scene1", "hello world!")
-
-Send data and or message to specific scene.
-That will call .onMessage callback, which will get all arguments.
-
-Example:
--- main.lua
-scenes.send("scene1", "hello world!")
-
--- scene1.lua
-scene.onMessage = function(...)
-  local args = {...}
-  print(args[1])
-end
---]]
-  
-  -- Check if scene exist.
-  if not scenes.list[scene] then
-    error(".send: You tried to send message to scene \"" .. scene .. "\" but there is no such scene")
-  end
-  -- Send all arguments to scene
-  scenes.list[scene].onMessage(...)
+  return scenes.list[scene][func](...)
 end
 
 scenes.unset = function(...)
