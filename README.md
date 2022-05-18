@@ -39,11 +39,11 @@ https://youtu.be/FScgWYgmUJM
 
 3 Load scenes:
 
-``` SS.load("scene1", "scene2", "scene3") -- Yes, you can load several files at once, if you need.
+``` SS.load("scene1", "scene2", "scene3") -- Yes, you can load several files at once, if you need.```
 
 4 Activate needed scenes:
 
-``` SS.activate("scene1", "scene2")
+``` SS.activate("scene1", "scene2")```
 
 5 Provide default update/draw dunction:
 
