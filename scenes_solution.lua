@@ -1,3 +1,7 @@
+-- TODO:
+-- add path to scene in moment of loading, such as:
+-- scene.pathTo = 
+
 -- At bottom you will find demo, don't miss it, if you have not much idea of what this library do.
 -- There changelog, too.
 
